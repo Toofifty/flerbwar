@@ -5,10 +5,30 @@
 		<link rel="stylesheet" href="css/style.css"/>
 		<script src="socket.io/socket.io.js"></script>
 		<script src="js/jquery.min.js"></script>
-		<script src="js/player.js"></script>
+		<script src="js/noise.js"></script>
+		<script src="js/map.js"></script>
+		<script src="js/object.js"></script>
 		<script src="js/client.js"></script>
+		<script src="js/ui.js"></script>
 	</head>
 	<body>
 		<canvas id="game"></canvas>
+		
+		<div id="log">
+		</div>
+		
+		<div class="scoreboard">
+			<div id="sb-smallest" class="sub-board">
+				<h2>Smallest</h2>
+			</div>
+			<div id="sb-largest" class="sub-board">
+				<h2>Largest</h2>
+			</div>
+		</div>
+		
+		<div id="name-input">
+			<input type="textarea" id="player-name"/>
+			<button id="submit-player-name">Update name</button>
+		</div>
 	</body>
 </html>

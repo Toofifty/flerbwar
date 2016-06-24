@@ -1,13 +1,83 @@
+@import url(https://fonts.googleapis.com/css?family=Indie+Flower|Source+Code+Pro|Lato);
+
 body {
 	background: #222;
 	margin: 0;
 	padding: 0;
 	width: 100%;
 	height: 100vh;
+	overflow: hidden;
 }
 
 canvas {
-	background: #AAA;
+	background: #222;
 	width: 100%;
 	height: 100%;
+}
+
+#name-input {
+	background: #222;
+	
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	
+	padding: 10px;
+}
+
+#log {
+	background: rgba(32,32,32,0.75);
+	position: fixed;
+	left: 0;
+	top: 0;
+	height: 100%;
+	width: 20%;
+	max-width: 300px;
+	padding: 2px;
+	overflow: hidden;
+}
+
+#log > p {
+	color: #FFF;
+	font-family: "Source Code Pro", sans-serif;
+	font-size: 0.8em;
+	padding: 0;
+	margin: 0;
+}
+
+#log > p:before {
+	content: "> ";
+}
+
+.scoreboard {
+	background: rgba(32,32,32,0.75);
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: #FFF;
+	font-family: "Lato", sans-serif;
+	width: 20%;
+	max-width: 300px;
+	
+	vertical-align: top;
+}
+
+.scoreboard h2 {
+	text-transform: uppercase;
+	font-size: 0.8em;
+	text-align: center;
+	border-bottom: 1px solid #FFF;
+	padding: 5px;
+	margin: 0px;
+}
+
+.sub-board {
+	text-align: center;
+	display: inline-block;
+	background: rgba(255,255,255,0.1);
+	padding: 5px;
+	margin: 5px;
+	width: calc(100% - 20px);
+	vertical-align: top;
+	overflow: hidden;
 }

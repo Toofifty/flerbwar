@@ -1,170 +1,305 @@
 /*
  * client.js - client side socket connection to the server
  */
+ 
+/* global Player LocalControls Map Camera Graphics $ io Keyboard log_message 
+update_hs */
+
+var game;
+
+var entityMap = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': '&quot;',
+    "'": '&#39;',
+    "/": '&#x2F;'
+  };
+
+function escape_html(string) {
+    return String(string).replace(/[&<>"'\/]/g, function (s) {
+      return entityMap[s];
+    });
+}
 
 $(document).ready(function() {
+    
+    $(window).resize(function(event) {
+        game.resize();
+    });
+
+    var socket = io();
+
+    socket.on("new player", function(data) {
+
+        // prevent duplicate players
+        if (game.get_player(data.id) != null) return;
+
+        var noob = new Player(data.x, data.y, data.id);
+        noob.set_name(data.name);
+        noob.set_color(data.color);
+        game.add_player(noob);
+        
+        log_message(noob.name + " joined");
+
+    });
+    
+    socket.on("del player", function(id) {
+        
+        var player = game.del_player(id);
+        
+        if (player == null) return;
+        
+        log_message(player.name + " left");
+        
+    });
+
+    socket.on("new id", function(id) {
+
+        game.local_player.set_id(id);
+
+    });
+
+    socket.on("soft update player", function(data) {
+
+        var player = game.get_player(data.id);
+
+        if (player == null) return;
+
+        player.update_acc(data.ax, data.ay);
+        player.resize(data.size);
+        player.reset_deadmarks();
+
+    });
+
+    socket.on("hard update player", function(data) {
+
+        var player = game.get_player(data.id);
+
+        if (player == null || player == game.local_player) return;
+
+        player.move(data.x, data.y);
+
+        player.update_acc(data.ax, data.ay);
+
+    });
+    
+    socket.on("player name update", function(data) {
+        
+        if (data.id == game.local_player.id) {
+            
+            log_message("You are now known as " + data.name);
+            return;
+            
+        }
+        
+        var player = game.get_player(data.id);
+        
+        if (player != null) {
+            
+            log_message(player.name + " is now known as " + data.name);
+            player.set_name(data.name);
+            
+        }
+        
+    });
+    
+    socket.on("broadcast message", function(msg) {
+        
+       log_message(msg);
+        
+    });
+
+    // looping functions
+    var update_game = function() { game.update(); };
+    var soft_update = function() { game.soft_update(); };
+    var hard_update = function() { game.hard_update(); };
+
+    /*
+     * GAME object
+     * Contains all game-specific data, including renderer, player list,
+     * update loop etc
+     */
+    game = {
+
+        canvas: $("#game")[0],
+
+        socket: socket,
 
-	var socket = io();
+        local_player: null,
 
-	var players = [];
+        players: [],
 
-	socket.on("new player", function(data) {
+        objects: [],
+        
+        map: null,
+        
+        camera: null,
 
-		console.log(data);
-		game.add_player(new Player(data.x, data.y, data.id));
+        keyboard: new Keyboard($(window)),
 
-	});
+        init: function() {
 
-	socket.on("new id", function(id) {
+            this.canvas.width = $(window).innerWidth();
+            this.canvas.height = $(window).innerHeight();
 
-		game.local_player.set_id(id);
-		console.log("set id to " + id);
+            this.context = this.canvas.getContext("2d");
+            
+            this.context.font = "20px Comic Sans MS";
+            this.context.textAlign = "center";
+            this.context.strokeStyle = "#FFF";
 
-	});
+            this.interval = setInterval(update_game, 20);
+            this.server_interval = setInterval(soft_update, 20);
+            this.full_server_interval = setInterval(hard_update, 2000);
+            
+            this.map = new Map();
+            
+            this.camera = new Camera(this.canvas.width, this.canvas.height);
+            
+            this.graphics = new Graphics(this);
+
+        },
+
+        clear: function() {
 
-	socket.on("update player", function(data) {
+            this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        },
+        
+        resize: function() {
+
+            this.canvas.width = $(window).innerWidth();
+            this.canvas.height = $(window).innerHeight();
+            
+            this.context.font = "20px Comic Sans MS";
+            this.context.textAlign = "center";
+            
+            this.camera.resize($(window).innerWidth(), $(window).innerHeight())
+            
+        },
+
+        update: function() {
+
+            this.clear();
+            
+            this.map.draw(this);
+            
+            this.controls.update(this);
+            
+            this.camera.update();
+            
+            for (var i in this.objects) {
+                this.objects[i].update(this);
+                this.objects[i].draw(this);
+            }
+
+            for (var i in this.players) {
+                if (this.players[i].id == this.local_player.id) continue;
+                this.players[i].update(this);
+                // players can be destroyed while in 'update'
+                if (this.players[i] !== undefined)
+                    this.players[i].draw(this);
+            }
+            
+            // draw local player last
+            this.local_player.update(this);
+            this.local_player.draw(this);
 
-		var player = game.get_player(data.id);
+        },
 
-		if (player == null) return;
+        soft_update: function() {
 
-		player.update_acc(data.ax, data.ay);
+            this.socket.emit("soft update", this.local_player.soft_data());
 
-	});
+        },
 
-	socket.on("full update player", function(data) {
+        hard_update: function() {
 
-		var player = game.get_player(data.id);
+            this.socket.emit("hard update", this.local_player.hard_data());
+            
+            update_hs(this.players);
 
-		if (player == null) return;
+        },
 
-		player.move(data.x, data.y);
+        add_object: function(obj) {
 
-		if (player == game.local_player) return;
+            this.objects.push(obj);
 
-		player.update_acc(data.ax, data.ay);
+        },
 
-	});
+        remove_object: function(obj) {
 
-	var update_game = function() {
-		game.update();
-	}
+            var i = this.objects.indexOf(obj);
+            if (i > -1) this.objects.splice(i, 1);
 
-	var update_server = function() {
-		game.update_server();
-	}
+        },
 
-	var full_update_server = function() {
-		game.full_update_server();
-	}
+        add_player: function(player) {
 
-	var game = {
+            this.players.push(player);
 
-		canvas: $("#game")[0],
+        },
+        
+        del_player: function(id) {
+            
+            if (id == this.local_player.id) return;
+            
+            for (var i in this.players) {
+                
+                if (this.players[i].id == id) {
+                    
+                    var p = this.players[i];
+                    this.players.splice(i, 1);
+                    return p;
+                    
+                }
+                
+            }
+            
+        },
 
-		socket: socket,
+        add_local_player: function(player) {
 
-		local_player: null,
+            this.controls = new LocalControls(player);
+            this.camera.focus(player);
+            this.camera.update();
+            
+            socket.emit("new player", {
+                x: player.x, 
+                y: player.y, 
+                name: player.name,
+                color: player.blob.color
+            });
 
-		players: [],
+            this.local_player = player;
+            this.add_player(player);
+        
+        },
 
-		objects: [],
+        get_player: function(id) {
 
-		keyboard: new Keyboard($(window)),
+            for (var i in this.players) {
 
-		init: function() {
+                if (this.players[i].id == id) return this.players[i];
 
-			this.canvas.width = $(window).innerWidth();
-			this.canvas.height = $(window).innerHeight();
+            }
 
-			this.context = this.canvas.getContext("2d");
+            return null;
 
-			this.interval = setInterval(update_game, 20);
-			this.server_interval = setInterval(update_server, 20);
-			this.full_server_interval = setInterval(full_update_server, 2000);
+        },
+        
+        set_local_player_name: function(name) {
+            
+            this.local_player.set_name(name);
+            this.socket.emit("player name update", name);
+            
+        }
 
-			this.context.fillStyle = "hsl(0,50%,50%)";
-			this.context.fillRect(50, 50, 150, 150);
+    };
 
-		},
+    game.init();
 
-		clear: function() {
-
-			this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-		},
-
-		update: function() {
-
-			this.clear();
-			for (i in this.objects) {
-				this.objects[i].update(this);
-				this.objects[i].draw(this);
-			}
-
-			for (i in this.players) {
-				this.players[i].update(this);
-				this.players[i].draw(this);
-			}
-
-		},
-
-		update_server: function() {
-
-			this.socket.emit("update", this.local_player.regular_data());
-
-		},
-
-		full_update_server: function() {
-
-			this.socket.emit("full update", this.local_player.full_data());
-
-		},
-
-		add_object: function(obj) {
-
-			this.objects.push(obj);
-
-		},
-
-		remove_object: function(obj) {
-
-			var i = this.objects.indexOf(obj);
-			if (i > -1) this.objects.splice(i, 1);
-
-		},
-
-		add_player: function(player) {
-
-			this.players.push(player);
-
-		},
-
-		add_local_player: function(player) {
-
-			socket.emit("new player", {x: player.player.x, y: player.player.y});
-
-			this.local_player = player;
-			this.add_player(player);
-		
-		},
-
-		get_player: function(id) {
-
-			for (var i in this.players) {
-
-				if (this.players[i].id == id) return this.players[i];
-
-			}
-
-			return null;
-
-		}
-
-	}
-
-	game.init();
-
-	game.add_local_player(new LocalPlayer(500, 500));
+    game.add_local_player(new Player(game.map.size / 2, game.map.size / 2));
 
 });
