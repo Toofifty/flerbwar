@@ -2,7 +2,7 @@
  * ui.js - interactive UI elements from HTML
  */
  
-/* global $ game two_dec */
+/* global $ game two_dec escape_html */
 
 var log_message;
 var update_hs;
@@ -19,7 +19,7 @@ $(document).ready(function() {
        event.stopPropagation();
        event.preventDefault();
        
-       if ($name_area.val().length >= 15) return;
+       if ($name_area.val().length >= 20) return;
        
        game.set_local_player_name($name_area.val());
         

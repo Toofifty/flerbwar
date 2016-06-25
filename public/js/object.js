@@ -18,29 +18,37 @@ var Blob = function(x, y, size, color) {
 
 	this.x = x;
 	this.y = y;
-	this.size = size || parseInt(Math.random() * 100, 10);
-	this.color = color || parseInt(Math.random() * 255, 10);
+	this.size = size;
+	this.color = color;
 
-	this.reduce = function() {
+	this.reduce = function(game) {
 
 		this.size /= 1.03;
 		if (this.size < MIN_SIZE) this.size = MIN_SIZE;
+		
+		game.socket.emit("debug resize", this.size);
 
 	};
 
-	this.increase = function() {
+	this.increase = function(game) {
 
 		this.size *= 1.03;
 		if (this.size > MAX_SIZE) this.size = MAX_SIZE;
+		
+		game.socket.emit("debug resize", this.size);
 
 	};
 
 	this.draw = function(game) {
 		
+		if (this.size === undefined) console.log("undefined size for " + this.color);
+		
 		// game.graphics.circle(this.x, this.y, this.size, 
 		// 	"hsl(" + this.color + ", 50%, 50%)");
 		
 		game.graphics.circle(this.x, this.y, this.size, this.color);
+		
+		game.graphics.minimap_dot(this.x, this.y, this.size, this.color);
 
 	};
 
@@ -68,12 +76,11 @@ var Player = function(x, y, id) {
 	
 	for (var i = 0; i < 3; i++) this.name += random_hex();
 
-	this.blob = new Blob(x, y, 20, this.name);
+	this.blob = new Blob(x, y, 0.5, this.name);
+	
+	this.dir = 0;
 	
 	this.deadmarks = 0;
-
-	this.reduce = function() { this.blob.reduce(); };
-	this.increase = function() { this.blob.increase(); };
 	
 	this.reset_deadmarks = function() {
 		
@@ -118,6 +125,12 @@ var Player = function(x, y, id) {
 		this.blob.size = size;
 		
 	};
+	
+	this.set_dir = function(dir) {
+		
+		this.dir = dir;
+		
+	};
 
 	/* apply acceleration and calculate new position */
 	this.update = function(game) {
@@ -125,8 +138,8 @@ var Player = function(x, y, id) {
 		this.x += this.ax;
 		this.y += this.ay;
 
-		this.ax = two_dec(this.ax / 1.1);
-		this.ay = two_dec(this.ay / 1.1);
+		this.ax = two_dec(this.ax / 1.05);
+		this.ay = two_dec(this.ay / 1.05);
 
 		this.blob.move(this.x, this.y);
 		
@@ -142,9 +155,15 @@ var Player = function(x, y, id) {
 	};
 
 	this.draw = function(game) {
+			
+		game.graphics.pointer(this.x, this.y, this.blob.size * 17/16, "#FFF",
+			this.dir);
 
 		this.blob.draw(game);
 		
+		game.graphics.pointer(this.x, this.y, this.blob.size, this.blob.color,
+			this.dir);
+			
 		game.graphics.text(this.name, this.x, this.y);// - this.blob.size - 10);
 
 	};
@@ -155,7 +174,7 @@ var Player = function(x, y, id) {
 			id: this.id,
 			ax: this.ax,
 			ay: this.ay,
-			size: this.blob.size
+			dir: this.dir
 		};
 
 	};
@@ -166,7 +185,6 @@ var Player = function(x, y, id) {
 			id: this.id,
 			ax: this.ax,
 			ay: this.ay,
-			size: this.blob.size,
 			x: this.x,
 			y: this.y
 		};
@@ -188,14 +206,50 @@ var LocalControls = function(player) {
 		if (game.keyboard.is_down("a")) this.player.ax -= inc;
 		if (game.keyboard.is_down("s")) this.player.ay += inc;
 		if (game.keyboard.is_down("d")) this.player.ax += inc;
-		if (game.keyboard.is_down("e")) this.player.reduce();
-		if (game.keyboard.is_down("q")) this.player.increase();
+		// if (game.keyboard.is_down("r")) this.player.dir += 0.1;
+		// if (game.keyboard.is_down("t")) this.player.dir -= 0.1;
+		if (game.keyboard.is_down("e")) this.player.blob.reduce(game);
+		if (game.keyboard.is_down("q")) this.player.blob.increase(game);
 		
 		// game.camera.scale = 20 / Math.sqrt(this.player.blob.size);
 		game.camera.scale = 20 / Math.sqrt(this.player.blob.size) - 0.5;
+		
+		var sx = game.canvas.width / 2;
+		var sy = game.canvas.height / 2;
+		
+		var mx = game.mouse.x;
+		var my = game.mouse.y;
+		
+		this.player.set_dir(Math.atan2((my - sy), (mx - sx)) + Math.PI / 2);
 
 	};
 
+};
+
+var SiphonBlob = function(x, y, id, size, color) {
+	
+	this.id = id;
+	
+	this.blob = new Blob(x, y, size, color);
+	
+	this.resize = function(size) {
+		
+		this.blob.size = size;
+		
+	};
+
+	this.update = function(game) {
+		
+		
+		
+	};
+	
+	this.draw = function(game) {
+		
+		this.blob.draw(game);
+		
+	};
+	
 };
 
 var Keyboard = function(elem) {
@@ -207,7 +261,7 @@ var Keyboard = function(elem) {
 	// shortcut for common keys
 	this.keymap = {
 		"w": 87, "a": 65, "s": 83, "d": 68,
-		"space": 32, "q": 81, "e": 69
+		"space": 32, "q": 81, "e": 69, "r": 82, "t": 84
 	};
 
 	elem.keydown(function(event) {

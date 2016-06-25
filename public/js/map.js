@@ -110,6 +110,10 @@ var Graphics = function(game) {
     this.camera = game.camera;
     this.context = game.context;
     
+    this.minimap = game.mm_context;
+    this.map_size = game.map.size;
+    this.minimap_size = game.mm_canvas.width;
+    
     // should be the size of the largest object in the game
     // so it doesn't get culled (drink!)
     this.safe_zone = 250;
@@ -139,6 +143,27 @@ var Graphics = function(game) {
         
     };
     
+    this.pointer = function(x, y, size, color, dir) {
+        
+        var p_dir = dir - Math.PI * 3 / 4;
+        
+        var tl = this.camera.apply(x, y);
+        
+        // translate to point of rotation
+        this.context.translate(tl.x, tl.y);
+        // rotate by dir
+        this.context.rotate(p_dir);
+        // translate back
+        this.context.translate(-tl.x, -tl.y);
+        
+        this.rect(x, y, size * 7/8, size * 7/8, color);
+        
+        this.context.translate(tl.x, tl.y);
+        this.context.rotate(-p_dir);
+        this.context.translate(-tl.x, -tl.y);
+        
+    };
+    
     this.rect = function(x, y, w, h, color) {
         
         if (color !== undefined)
@@ -165,6 +190,34 @@ var Graphics = function(game) {
         if (this.out_of_bounds(tl)) return;
 		    
 		this.context.fillText(text, tl.x, tl.y);  
+        
+    };
+    
+    this.minimap_dot = function(x, y, size, color) {
+        
+        this.minimap.fillStyle = color;
+        
+        x = x / this.map_size * this.minimap_size;
+        y = y / this.map_size * this.minimap_size;
+        size = size / this.map_size * this.minimap_size;
+        
+        this.minimap.beginPath();
+        this.minimap.arc(x, y, size, 0, Math.PI * 2);
+        this.minimap.fill();
+        
+    };
+    
+    this.minimap_ring = function(x, y, size) {
+        
+        this.minimap.strokeStyle = "#FFF";
+        
+        x = x / this.map_size * this.minimap_size;
+        y = y / this.map_size * this.minimap_size;
+        size = size / this.map_size * this.minimap_size;
+        
+        this.minimap.beginPath();
+        this.minimap.arc(x, y, size, 0, Math.PI * 2);
+        this.minimap.stroke();
         
     };
     
