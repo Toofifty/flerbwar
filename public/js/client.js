@@ -2,8 +2,8 @@
  * client.js - client side socket connection to the server
  */
  
-/* global Player LocalControls SiphonBlob Map Camera Graphics $ io Keyboard 
-log_message update_hs two_dec */
+/* global Player LocalControls SiphonBlob Projectile Map Camera Graphics $ io 
+Keyboard log_message update_hs two_dec */
 
 var game;
 
@@ -14,20 +14,28 @@ var entityMap = {
     '"': '&quot;',
     "'": '&#39;',
     "/": '&#x2F;'
-  };
+ };
 
-function escape_html(string) {
-    return String(string).replace(/[&<>"'\/]/g, function (s) {
+var escape_html = function(string) {
+    
+    return String(string).replace(/[&<>"'\/]/g, function(s) {
+        
       return entityMap[s];
+      
     });
-}
+    
+};
 
 $(document).ready(function() {
     
+    // window resizing
     $(window).resize(function(event) {
+        
         game.resize();
+        
     });
     
+    // game mouse updating
     $("#game").mousemove(function(event) {
         
         game.update_mouse(event.clientX, event.clientY);
@@ -49,13 +57,17 @@ $(document).ready(function() {
         if (game.get_player(data.id) != null) return;
 
         var noob = new Player(data.x, data.y, data.id);
-        noob.set_name(data.name);
-        noob.set_color(data.color);
-        noob.set_dir(data.dir);
-        noob.resize(data.size);
+        
+        noob.name(data.name);
+        noob.color(data.color);
+        noob.dir(data.dir);
+        noob.size(data.size);
+        
         game.add_player(noob);
         
-        log_message(noob.name + " joined");
+        log_message(noob.name() + " joined");
+        log_message("There are now " + game.players.length 
+            + " players online.");
 
     });
     
@@ -65,13 +77,15 @@ $(document).ready(function() {
         
         if (player == null) return;
         
-        log_message(player.name + " left");
+        log_message(player.name() + " left");
+        log_message("There are now " + game.players.length 
+            + " players online.");
         
     });
 
     socket.on("confirm player", function(data) {
 
-        game.local_player.set_id(data.id);
+        game.local_player.id(data.id);
         //game.local_player.resize(data.size);
 
     });
@@ -82,9 +96,9 @@ $(document).ready(function() {
 
         if (player == null) return;
 
-        player.update_acc(data.ax, data.ay);
-        player.resize(data.size);
-        player.set_dir(data.dir);
+        player.vel(data.vx, data.vy);
+        player.size(data.size);
+        player.dir(data.dir);
         player.reset_deadmarks();
 
     });
@@ -95,15 +109,15 @@ $(document).ready(function() {
 
         if (player == null || player == game.local_player) return;
 
-        player.move(data.x, data.y);
+        player.pos(data.x, data.y);
 
-        player.update_acc(data.ax, data.ay);
+        player.vel(data.vx, data.vy);
 
     });
     
     socket.on("player name update", function(data) {
         
-        if (data.id == game.local_player.id) {
+        if (data.id == game.local_player.id()) {
             
             log_message("You are now known as " + data.name);
             return;
@@ -114,8 +128,8 @@ $(document).ready(function() {
         
         if (player != null) {
             
-            log_message(player.name + " is now known as " + data.name);
-            player.set_name(data.name);
+            log_message(player.name() + " is now known as " + data.name);
+            player.name(data.name);
             
         }
         
@@ -138,7 +152,25 @@ $(document).ready(function() {
     
     socket.on("siphon update", function(data) {
         
-        game.siphons[data.id].resize(data.size);
+        game.siphons[data.id].size(data.size);
+        
+    });
+    
+    socket.on("siphon refresh", function(data) {
+        
+        var siphon = game.get_siphon(data.id);
+        
+        if (siphon == null) {
+            
+            siphon = new SiphonBlob(data.x, data.y, data.id, data.size, 
+                data.color);
+                
+        } else {
+            
+            siphon.size(data.size);
+            siphon.pos(data.x, data.y);
+            
+        }
         
     });
     
@@ -146,7 +178,24 @@ $(document).ready(function() {
         
         var player = game.get_player(data.id);
         
-        player.resize(data.size);
+        if (player == null) return;
+        
+        player.size(data.size);
+        
+    });
+    
+    socket.on("new projectile", function(data) {
+        
+        var proj = new Projectile(data.id, data.x, data.y, data.vx, data.vy,
+            data.size, data.color, data.pid);
+            
+        game.add_projectile(proj);
+        
+    });
+    
+    socket.on("del projectile", function(id) {
+        
+        game.del_projectile(id); 
         
     });
 
@@ -163,25 +212,23 @@ $(document).ready(function() {
     game = {
 
         canvas: $("#game")[0],
-        
         mm_canvas: $("#minimap")[0],
 
         socket: socket,
 
-        local_player: null,
-
         players: [],
-
+        local_player: null,
         siphons: [],
+        projectiles: [],
         
-        map: null,
-        
+        map: new Map(),
         camera: null,
         
         mouse: {x: 0, y: 0, b: -1},
 
         keyboard: new Keyboard($(window)),
 
+        /* initialise the game canvases, and begin game loop intervals */
         init: function() {
 
             this.canvas.width = $(window).innerWidth();
@@ -201,72 +248,92 @@ $(document).ready(function() {
             this.server_interval = setInterval(soft_update, 20);
             this.full_server_interval = setInterval(hard_update, 200);
             
-            this.map = new Map();
-            
             this.camera = new Camera(this.canvas.width, this.canvas.height);
             
             this.graphics = new Graphics(this);
 
         },
 
+        /* clear both canvases before the next frame */
         clear: function() {
 
             this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.mm_context.clearRect(0, 0, this.mm_canvas.width, this.mm_canvas.height);
+            this.mm_context.clearRect(0, 0, this.mm_canvas.width, 
+                this.mm_canvas.height);
 
         },
         
+        /* update canvas width and height to prevent stretching */
         resize: function() {
 
             this.canvas.width = $(window).innerWidth();
             this.canvas.height = $(window).innerHeight();
             
-            this.context.font = "20px Comic Sans MS";
+            this.context.font = "20px Indie Flower";
             this.context.textAlign = "center";
             
-            this.camera.resize($(window).innerWidth(), $(window).innerHeight())
+            this.camera.resize($(window).innerWidth(), $(window).innerHeight());
             
         },
 
+        /* draw all objects - map, siphons, players, projectiles */
         update: function() {
 
             this.clear();
             
             this.map.draw(this);
+            this.map.draw_minimap(this);
             
             this.controls.update(this);
             
             this.camera.update();
             
+            for (var i in this.projectiles) {
+                
+                this.projectiles[i].update(this);
+                this.projectiles[i].draw(this);
+                
+            }
+            
             for (var i in this.siphons) {
+                
                 this.siphons[i].update(this);
                 this.siphons[i].draw(this);
+                
             }
 
             for (var i in this.players) {
-                if (this.players[i].id == this.local_player.id) continue;
+                
+                if (this.players[i].id() == this.local_player.id()) continue;
+                
                 this.players[i].update(this);
-                // players can be destroyed while in 'update'
-                if (this.players[i] !== undefined) {
+                
+                // players may be destroyed while in 'update'
+                if (this.players[i] !== undefined)
                     this.players[i].draw(this);
-                }
+                    
             }
             
             // draw local player last
             this.local_player.update(this);
             this.local_player.draw(this);
             
-            this.graphics.minimap_ring(this.local_player.x, this.local_player.y,
-                this.local_player.blob.size);
+            this.graphics.minimap_ring(
+                this.local_player.pos().x, 
+                this.local_player.pos().y,
+                this.local_player.size()
+            );
 
         },
 
+        /* send a small update to the server */
         soft_update: function() {
 
             this.socket.emit("soft update", this.local_player.soft_data());
 
         },
 
+        /* send a full update to the server, and update highscores */
         hard_update: function() {
 
             this.socket.emit("hard update", this.local_player.hard_data());
@@ -279,6 +346,22 @@ $(document).ready(function() {
 
             this.siphons.push(obj);
 
+        },
+        
+        get_siphon: function(id) {
+            
+            for (var i in this.siphons) {
+                
+                if (this.siphons[i].id == id) {
+                    
+                    return this.siphons[i];
+                    
+                }
+                
+            }
+            
+            return null;
+            
         },
 
         remove_siphon: function(obj) {
@@ -296,11 +379,11 @@ $(document).ready(function() {
         
         del_player: function(id) {
             
-            if (id == this.local_player.id) return;
+            if (id == this.local_player.id()) return;
             
             for (var i in this.players) {
                 
-                if (this.players[i].id == id) {
+                if (this.players[i].id() == id) {
                     
                     var p = this.players[i];
                     this.players.splice(i, 1);
@@ -319,10 +402,10 @@ $(document).ready(function() {
             this.camera.update();
             
             socket.emit("new player", {
-                x: player.x, 
-                y: player.y, 
-                name: player.name,
-                color: player.blob.color
+                x: player.pos().x, 
+                y: player.pos().y, 
+                name: player.name(),
+                color: player.color()
             });
 
             this.local_player = player;
@@ -334,7 +417,7 @@ $(document).ready(function() {
 
             for (var i in this.players) {
 
-                if (this.players[i].id == id) return this.players[i];
+                if (this.players[i].id() == id) return this.players[i];
 
             }
 
@@ -344,7 +427,7 @@ $(document).ready(function() {
         
         set_local_player_name: function(name) {
             
-            this.local_player.set_name(name);
+            this.local_player.name(name);
             this.socket.emit("player name update", name);
             
         },
@@ -367,8 +450,8 @@ $(document).ready(function() {
             
             var tm = 0;
             
-            for (var i in this.siphons) tm += this.siphons[i].blob.size;
-            for (var i in this.players) tm += this.players[i].blob.size;
+            for (var i in this.siphons) tm += this.siphons[i].size();
+            for (var i in this.players) tm += this.players[i].size();
             
             console.log(tm);
             
@@ -380,7 +463,29 @@ $(document).ready(function() {
             
             player = player || this.local_player;
             
-            return two_dec(player.blob.size / this.total_mass() * 100);
+            return two_dec(player.size() / this.total_mass() * 100);
+            
+        },
+        
+        add_projectile: function(projectile) {
+            
+            this.projectiles.push(projectile);
+            
+        },
+        
+        del_projectile: function(id) {
+            
+            for (var i in this.projectiles) {
+                
+                if (this.projectiles[i].id() == id) {
+                    
+                    var p = this.projectiles[i];
+                    this.projectiles.splice(i, 1);
+                    return p;
+                    
+                }
+                
+            }
             
         }
 

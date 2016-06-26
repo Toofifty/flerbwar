@@ -12,7 +12,7 @@ $(document).ready(function() {
     var $name_area = $("#player-name");
     var $name_submit = $("#submit-player-name");
     
-    $name_area.val(game.local_player.name);
+    $name_area.val(game.local_player.name());
     
     $name_submit.click(function(event) {
        
@@ -53,9 +53,9 @@ $(document).ready(function() {
             
             for (var j in sorted) {
                 
-                if (players[i].id == players[j].id) continue;
+                if (players[i].id() == players[j].id()) continue;
                 
-                if (players[i].blob.size >= players[j].blob.size) {
+                if (players[i].size() >= players[j].size()) {
                     
                     sorted.splice(j, 0, players[i]);
                     
@@ -73,7 +73,7 @@ $(document).ready(function() {
         
         for (var i = 0; i < 5 && i < sorted.length; i++) {
             
-            out += "<p>" + escape_html(sorted[i].name) + "<br>" + parseInt(two_dec(sorted[i].blob.size) * 100, 10) + "</p>";
+            out += "<p>" + escape_html(sorted[i].name()) + "<br>" + parseInt(two_dec(sorted[i].size()) * 100, 10) + "</p>";
             
         }
         
@@ -81,9 +81,9 @@ $(document).ready(function() {
         
         out = "";
         
-        for (var i = sorted.length - 1; i > sorted.length - 5 && i > 0; i--) {
+        for (var i = sorted.length - 1; i > sorted.length - 5 && i >= 0; i--) {
             
-            out += "<p>" + escape_html(sorted[i].name) + "<br>" + parseInt(two_dec(sorted[i].blob.size) * 100, 10) + "</p>";
+            out += "<p>" + escape_html(sorted[i].name()) + "<br>" + parseInt(two_dec(sorted[i].size()) * 100, 10) + "</p>";
             
         }
         

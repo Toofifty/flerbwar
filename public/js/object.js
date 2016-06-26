@@ -4,83 +4,154 @@
  
 /* global log_message */
 
-var MAX_SIZE = 250, MIN_SIZE = 0.1;
+var MAX_SIZE = 250, MIN_SIZE = 0.1, COOLDOWN = 20;
 
 var two_dec = function(num) {
+	
 	return parseInt(num * 100, 10) / 100;
+	
 };
 
 var random_hex = function() {
+	
 	return parseInt(Math.random() * 16).toString(16).toUpperCase();	
+	
+};
+
+var dist = function(x, y, x1, y1) {
+	
+	if (x1 === undefined && y1 === undefined)
+		return Math.sqrt((x.x - y.x) * (x.x - y.x) + (x.y - y.y) * (x.y - y.y));
+    
+    return Math.sqrt((x - x1) * (x - x1) + (y - y1) * (y - y1));
+    
 };
 
 var Blob = function(x, y, size, color) {
 
 	this.x = x;
 	this.y = y;
-	this.size = size;
-	this.color = color;
+	
+	this._size = size;
+	this._color = color;
 
 	this.reduce = function(game) {
 
-		this.size /= 1.03;
-		if (this.size < MIN_SIZE) this.size = MIN_SIZE;
+		this.size(this._size / 1.03);
 		
-		game.socket.emit("debug resize", this.size);
+		game.socket.emit("debug resize", this.size());
 
 	};
 
 	this.increase = function(game) {
 
-		this.size *= 1.03;
-		if (this.size > MAX_SIZE) this.size = MAX_SIZE;
+		this.size(this._size * 1.03);
 		
-		game.socket.emit("debug resize", this.size);
+		game.socket.emit("debug resize", this.size());
 
 	};
 
 	this.draw = function(game) {
 		
-		if (this.size === undefined) console.log("undefined size for " + this.color);
+		if (this.size() === undefined) console.log("undefined size for " + this.color());
 		
 		// game.graphics.circle(this.x, this.y, this.size, 
 		// 	"hsl(" + this.color + ", 50%, 50%)");
 		
-		game.graphics.circle(this.x, this.y, this.size, this.color);
+		game.graphics.circle(this.x, this.y, this.size(), this.color());
 		
-		game.graphics.minimap_dot(this.x, this.y, this.size, this.color);
+		game.graphics.minimap_dot(this.x, this.y, this.size(), this.color());
 
 	};
 
-	this.move = function(x, y) {
+	this.pos = function(x, y) {
+		
+		if (y !== undefined) {
+			
+			this.x = x;
+			this.y = y;
+			
+		}
 
-		this.x = x;
-		this.y = y;
+		return {x: this.x, y: this.y};
 
+	};
+	
+	this.move = function(vx, vy) {
+		
+		this.x += vx;
+		this.y += vy;
+		
+	};
+	
+	this.size = function(size) {
+		
+		if (size !== undefined) {
+			
+			this._size = size;
+			
+			if (this._size > MAX_SIZE) this._size = MAX_SIZE;
+			if (this._size < MIN_SIZE) this._size = MIN_SIZE;
+			
+		}
+		
+		return this._size;
+		
+	};
+	
+	this.color = function(color) {
+		
+		if (color !== undefined) this._color = color;
+		
+		return this._color;
+		
 	};
 
 };
 
 var Player = function(x, y, id) {
-
-	// screen position (int)
-	this.x = x;
-	this.y = y;
-
-	// acceleration (2-dec float)
-	this.ax = 0;
-	this.ay = 0;
 	
-	this.id = id || -1;
-	this.name = "#";
-	
-	for (var i = 0; i < 3; i++) this.name += random_hex();
+	var self = this;
 
-	this.blob = new Blob(x, y, 0.5, this.name);
+	// velocity (2-dec float)
+	this.vx = 0;
+	this.vy = 0;
 	
-	this.dir = 0;
+	this._id = id || -1;
+	this._name = "#";
+	
+	for (var i = 0; i < 3; i++) this._name += random_hex();
+
+	this.blob = new Blob(x, y, 0.5, this._name);
+	
+	this._dir = 0;
 	
 	this.deadmarks = 0;
+	
+	this.shoot = function(game) {
+		
+		if (this.cooldown > 0) return;
+		
+		var sq_s = Math.sqrt(this.size());
+		
+		var id = parseInt(Math.random() * 1000, 10);
+		
+		game.add_projectile(new Projectile(id, this.pos().x, 
+			this.pos().y, Math.sin(this.dir()) * sq_s + this.vx, 
+			-Math.cos(this.dir()) * sq_s + this.vy, sq_s, this.color()), 
+			this._id);
+		
+		game.socket.emit("player shoot", this.hard_data());
+		
+		setTimeout(function() {
+			
+			game.del_projectile(id);
+			
+		}, 2000);
+		
+		this.cooldown = COOLDOWN;
+		
+	};
 	
 	this.reset_deadmarks = function() {
 		
@@ -88,93 +159,116 @@ var Player = function(x, y, id) {
 		
 	};
 
-	this.set_id = function(id) { 
+	this.id = function(id) { 
 		
-		this.id = id; 
+		if (id !== undefined) this._id = id;
 		
-	};
-	
-	this.set_name = function(name) {
-		
-		this.name = name;
+		return this._id;
 		
 	};
 	
-	this.set_color = function(color) {
+	this.name = function(name) {
 		
-		this.blob.color = color;
+		if (name !== undefined) this._name = name;
 		
-	};
-
-	this.move = function(x, y) {
-
-		this.x = x;
-		this.y = y;
-
-	};
-
-	this.update_acc = function(ax, ay) {
-
-		this.ax = ax;
-		this.ay = ay;
-
-	};
-	
-	this.resize = function(size) {
-		
-		this.blob.size = size;
+		return this._name;
 		
 	};
 	
-	this.set_dir = function(dir) {
+	this.color = function(color) {
 		
-		this.dir = dir;
+		return this.blob.color(color);
+		
+	};
+
+	this.pos = function(x, y) {
+
+		return this.blob.pos(x, y);
+
+	};
+
+	this.vel = function(vx, vy) {
+
+		if (vy !== undefined) {
+			
+			this.vx = vx;
+			this.vy = vy;
+			
+		}
+		
+		return {x: this.vx, y: this.vy};
+
+	};
+	
+	this.size = function(size) {
+		
+		return this.blob.size(size);
+		
+	};
+	
+	this.dir = function(dir) {
+		
+		if (dir !== undefined) this._dir = dir;
+		
+		return this._dir;
+		 
+	};
+	
+	this.move = function(vx, vy) {
+		
+		this.blob.move(vx, vy);
+		
+	};
+	
+	this.accelerate = function(ax, ay) {
+		
+		this.vel(this.vx + ax, this.vy + ay);
 		
 	};
 
 	/* apply acceleration and calculate new position */
 	this.update = function(game) {
 
-		this.x += this.ax;
-		this.y += this.ay;
-
-		this.ax = two_dec(this.ax / 1.05);
-		this.ay = two_dec(this.ay / 1.05);
-
-		this.blob.move(this.x, this.y);
+		// move blob by velocity
+		this.move(this.vx, this.vy);
 		
-		if (this.id != game.local_player.id) this.deadmarks++;
+		// add friction force
+		this.vel(two_dec(this.vx / 1.05), two_dec(this.vy / 1.05));
+		
+		if (this.id() != game.local_player.id()) this.deadmarks++;
+		else this.cooldown--;
 		
 		if (this.deadmarks == 1000) {
 			
-			game.del_player(this.id);
-			log_message(this.name + " vanished");
+			game.del_player(this.id());
+			log_message(this.name() + " vanished");
 			
 		}
 
 	};
 
 	this.draw = function(game) {
+		
+		var p = this.pos();
 			
-		game.graphics.pointer(this.x, this.y, this.blob.size * 17/16, "#FFF",
-			this.dir);
+		game.graphics.pointer(p.x, p.y, this.size() * 17/16, "#FFF",
+			this.dir());
 
 		this.blob.draw(game);
 		
-		game.graphics.pointer(this.x, this.y, this.blob.size, this.blob.color,
-			this.dir);
+		game.graphics.pointer(p.x, p.y, this.size(), this.color(), this.dir());
 			
-		game.graphics.text(this.name, this.x, this.y);// - this.blob.size - 10);
+		game.graphics.text(this.name(), p.x, p.y);// - this.blob.size - 10);
 
 	};
 
 	this.soft_data = function() {
 
 		return {
-			id: this.id,
-			ax: this.ax,
-			ay: this.ay,
-			dir: this.dir
+			id: this.id(),
+			vx: this.vx,
+			ay: this.vy,
+			dir: this.dir()
 		};
 
 	};
@@ -182,15 +276,81 @@ var Player = function(x, y, id) {
 	this.hard_data = function() {
 
 		return {
-			id: this.id,
-			ax: this.ax,
-			ay: this.ay,
-			x: this.x,
-			y: this.y
+			id: this.id(),
+			vx: this.vx,
+			vy: this.vy,
+			x: this.pos().x,
+			y: this.pos().y,
+			dir: this.dir()
 		};
 
 	};
 
+};
+
+var Projectile = function(id, x, y, vx, vy, size, color, pid) {
+	
+	this._id = id;
+	
+	this.vx = vx;
+	this.vy = vy;
+	
+	this.blob = new Blob(x, y, size, color);
+	
+	this.pid = pid;
+	
+	this.id = function(id) {
+		
+		if (id !== undefined) this._id = id;
+		
+		return this._id;
+		
+	};
+	
+	this.update = function(game) {
+		
+		this.blob.move(this.vx, this.vy);
+		
+		// check if dead
+		
+		for (var i in game.players) {
+			
+			var pl = game.players[i];
+			
+			if (pl.id() == this.pid) continue;
+			
+			var max_dist = pl.size() + this.blob.size();
+			
+			if (dist(this.blob.pos(), pl.pos()) < max_dist) {
+				
+				game.del_projectile(this.id);
+				
+			}
+			
+		}
+		
+		for (var i in game.siphons) {
+			
+			var si = game.siphons[i];
+			
+			var max_dist = si.size() + this.blob.size();
+			
+			if (dist(this.blob.pos(), si.pos()) < max_dist) {
+				
+				game.del_projectile(this.id);
+				
+			}
+			
+		}
+		
+	};
+	
+	this.draw = function(game) {
+		
+		this.blob.draw(game);
+		
+	};
+	
 };
 
 var LocalControls = function(player) {
@@ -199,20 +359,22 @@ var LocalControls = function(player) {
 
 	this.update = function(game) {
 		
-		// var inc = 0.1 / Math.pow(this.player.blob.size, 0.1);
-		var inc = 0.1 / Math.pow((this.player.blob.size + 0.5), 0.25);
+		// var acc = 0.1 / Math.pow(this.player.blob.size, 0.1);
+		var acc = 0.1 / Math.pow((this.player.blob.size() + 2.5), 0.25);
 
-		if (game.keyboard.is_down("w")) this.player.ay -= inc;
-		if (game.keyboard.is_down("a")) this.player.ax -= inc;
-		if (game.keyboard.is_down("s")) this.player.ay += inc;
-		if (game.keyboard.is_down("d")) this.player.ax += inc;
+		if (game.keyboard.is_down("w")) this.player.accelerate(0, -acc);
+		if (game.keyboard.is_down("a")) this.player.accelerate(-acc, 0);
+		if (game.keyboard.is_down("s")) this.player.accelerate(0, acc);
+		if (game.keyboard.is_down("d")) this.player.accelerate(acc, 0);
 		// if (game.keyboard.is_down("r")) this.player.dir += 0.1;
 		// if (game.keyboard.is_down("t")) this.player.dir -= 0.1;
-		if (game.keyboard.is_down("e")) this.player.blob.reduce(game);
-		if (game.keyboard.is_down("q")) this.player.blob.increase(game);
+		// if (game.keyboard.is_down("e")) this.player.blob.reduce(game);
+		// if (game.keyboard.is_down("q")) this.player.blob.increase(game);
+		
+		if (game.keyboard.is_down(" ")) this.player.shoot(game);
 		
 		// game.camera.scale = 20 / Math.sqrt(this.player.blob.size);
-		game.camera.scale = 20 / Math.sqrt(this.player.blob.size) - 0.5;
+		game.camera.scale = 20 / Math.sqrt(this.player.blob.size()) - 0.5;
 		
 		var sx = game.canvas.width / 2;
 		var sy = game.canvas.height / 2;
@@ -220,7 +382,7 @@ var LocalControls = function(player) {
 		var mx = game.mouse.x;
 		var my = game.mouse.y;
 		
-		this.player.set_dir(Math.atan2((my - sy), (mx - sx)) + Math.PI / 2);
+		this.player.dir(Math.atan2((my - sy), (mx - sx)) + Math.PI / 2);
 
 	};
 
@@ -232,15 +394,17 @@ var SiphonBlob = function(x, y, id, size, color) {
 	
 	this.blob = new Blob(x, y, size, color);
 	
-	this.resize = function(size) {
+	this.size = function(size) {
 		
-		this.blob.size = size;
+		return this.blob.size(size);
 		
 	};
 
-	this.update = function(game) {
+	this.update = function(game) {};
+	
+	this.pos = function(x, y) {
 		
-		
+		return this.blob.pos(x, y);
 		
 	};
 	
@@ -261,7 +425,7 @@ var Keyboard = function(elem) {
 	// shortcut for common keys
 	this.keymap = {
 		"w": 87, "a": 65, "s": 83, "d": 68,
-		"space": 32, "q": 81, "e": 69, "r": 82, "t": 84
+		" ": 32, "q": 81, "e": 69, "r": 82, "t": 84
 	};
 
 	elem.keydown(function(event) {

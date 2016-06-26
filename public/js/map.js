@@ -3,12 +3,12 @@
 var Map = function() {
   
     this.size = 4000;
-    this.density = 80;
+    this.density = 50;
     this.tiles = [];
         
     var tile_size = this.size / this.density;
     
-    var d = Math.sqrt(this.density);
+    var d = Math.sqrt(this.density) * 3;
 
     for (var i = 0; i < this.density; i++) {
         
@@ -16,7 +16,7 @@ var Map = function() {
             
             this.tiles.push(new Tile(
                 i * tile_size, j * tile_size, tile_size, 
-                PerlinNoise.noise(i / d, j / d)
+                PerlinNoise.noise(i / d, j / d) + Math.random() / 10
             ));
             
         }
@@ -33,6 +33,16 @@ var Map = function() {
         
     };
     
+    this.draw_minimap = function(game) {
+        
+        for (var i = 0; i < this.tiles.length; i++) {
+            
+            this.tiles[i].draw_minimap(game);
+            
+        }
+        
+    };
+    
 };
 
 var Tile = function(x, y, size, noise_val) {
@@ -40,8 +50,8 @@ var Tile = function(x, y, size, noise_val) {
     this.x = x;
     this.y = y;
     this.size = size;
-    this.color = "hsl(200, " + parseInt(noise_val * 75, 10) + "%, " 
-        + parseInt(noise_val * 75, 10) + "%)";
+    this.color = "hsl(" + parseInt(noise_val * 250) + ", " + parseInt(noise_val * 30, 10) + "%, " 
+        + parseInt(noise_val * 50, 10) + "%)";
     //this.color = "hsl(" + parseInt(noise_val * 25 + 140, 10) + ", 50%, 50%)";
     
     this.draw = function(game) {
@@ -50,6 +60,12 @@ var Tile = function(x, y, size, noise_val) {
         
         // game.context.fillStyle = this.color;
         // game.context.fillRect(this.x, this.y, this.size, this.size);
+        
+    };
+    
+    this.draw_minimap = function(game) {
+        
+        game.graphics.minimap_rect(this.x, this.y, this.size, this.size, this.color);
         
     };
     
@@ -98,8 +114,8 @@ var Camera = function(w, h) {
         
         if (this.target == null) return;
       
-        this.offset_x = this.w / (2 * this.scale) - this.target.x;
-        this.offset_y = this.h / (2 * this.scale) - this.target.y;
+        this.offset_x = this.w / (2 * this.scale) - this.target.pos().x;
+        this.offset_y = this.h / (2 * this.scale) - this.target.pos().y;
         
     };
     
@@ -117,6 +133,8 @@ var Graphics = function(game) {
     // should be the size of the largest object in the game
     // so it doesn't get culled (drink!)
     this.safe_zone = 250;
+        
+    var self = this;
     
     this.out_of_bounds = function(pos) {
         
@@ -218,6 +236,26 @@ var Graphics = function(game) {
         this.minimap.beginPath();
         this.minimap.arc(x, y, size, 0, Math.PI * 2);
         this.minimap.stroke();
+        
+    };
+    
+    this.minimap_rect = function(x, y, w, h, color) {
+        
+        var tl = this.camera.apply(x, y);
+        
+        if (this.out_of_bounds(tl)) return;
+        
+        var norm = function(v) {
+            return v / self.map_size * self.minimap_size;
+        }
+        
+        this.minimap.fillStyle = color;
+        x = norm(x);
+        y = norm(y);
+        w = norm(w);
+        h = norm(h);
+        
+        this.minimap.fillRect(x, y, w, h);
         
     };
     

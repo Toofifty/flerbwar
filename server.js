@@ -13,12 +13,14 @@ var port = process.argv[2] || 3000;
 // local
 var Player = require("./player").Player;
 var SiphonBlob = require("./player").SiphonBlob;
+var Projectile = require("./player").Projectile;
 
 var sockets = [];
 
 // game variables
 var players = [];
 var siphons = [];
+var projectiles = [];
 
 var map_size = 4000;
 
@@ -61,12 +63,36 @@ var get_player = function(id) {
     
 };
 
+var del_projectile = function(proj) {
+            
+    for (var i in players) {
+        
+        players[i].socket.emit("del projectile", proj.id);
+        
+    }
+    
+    for (var i in projectiles) {
+        
+        if (projectiles[i] == proj) {
+            
+            projectiles.splice(i, 1);
+            
+            return;
+            
+        }
+        
+    }
+    
+};
+
 // set up siphons
 for (var i = 0; i < 50; i++) {
     
-    siphons.push(
-        new SiphonBlob(Math.random() * map_size, Math.random() * map_size, i)
-    );
+    var si = new SiphonBlob(map_size, i);
+    
+    si.refresh();
+    
+    siphons.push(si);
     
 }
 
@@ -115,8 +141,11 @@ var game_loop = function() {
                 
                 pl.absorb(oth);
                 
-                if (changed_siphons.indexOf(oth) == -1) changed_siphons.push(oth);
-                if (changed_players.indexOf(pl) == -1) changed_players.push(pl);
+                if (changed_siphons.indexOf(oth) == -1) 
+                    changed_siphons.push(oth);
+                    
+                if (changed_players.indexOf(pl) == -1) 
+                    changed_players.push(pl);
                 
             }
             
@@ -124,12 +153,83 @@ var game_loop = function() {
         
     }
     
+    for (var i = 0; i < projectiles.length; i++) {
+        
+        var pr = projectiles[i];
+        var hit = false;
+        
+        pr.update();
+        
+        for (var j = 0; j < players.length; j++) {
+            
+            var oth = players[j];
+            
+            if (pr.player == oth) continue;
+            
+            var max_dist = pr.size + oth.size;
+            
+            if (dist(pr.x, pr.y, oth.x, oth.y) < max_dist) {
+                
+                hit = true;
+                
+                pr.player.hit(oth);
+                
+                if (changed_players.indexOf(pr.player) == -1) 
+                    changed_players.push(pr.player);
+                    
+                if (changed_players.indexOf(oth) == -1) 
+                    changed_players.push(oth);
+                
+            }
+            
+        }
+        
+        for (var j = 0; j < siphons.length; j++) {
+            
+            var oth = siphons[j];
+            
+            var max_dist = pr.size + oth.size;
+            
+            if (dist(pr.x, pr.y, oth.x, oth.y) < max_dist) {
+                
+                hit = true;
+                
+                pr.player.hit(oth);
+                
+                if (changed_players.indexOf(pr.player) == -1) 
+                    changed_players.push(pr.player);
+                    
+                if (oth.is_dead()) {
+                    
+                    oth.refresh();
+                    
+                    for (var i in players) {
+                        
+                        players[i].socket.emit("siphon refresh", oth.init_data());
+                        
+                    }
+                    
+                }
+                    
+                if (changed_siphons.indexOf(oth) == -1) 
+                    changed_siphons.push(oth);
+                
+            }
+            
+        }
+        
+        if (hit) del_projectile(pr);
+        
+    }
+    
+    // 
     for (var i in changed_players) {
         
         changed_players[i].socket.emit("self update", changed_players[i].self_data());
         
     }
     
+    // send all the changed siphon sizes to each player
     for (var i in players) {
         
         for (var j in changed_siphons) {
@@ -143,7 +243,7 @@ var game_loop = function() {
 };
 
 // begin game loop
-setInterval(game_loop, 25);
+setInterval(game_loop, 20);
 
 // game events
 io.on("connection", function(socket){
@@ -168,7 +268,6 @@ io.on("connection", function(socket){
     socket.on("new player", function(data) {
 
         console.log(data.name + " joined");
-        console.log(data);
 
         var noob = new Player(data.x, data.y, this.id);
         
@@ -210,7 +309,7 @@ io.on("connection", function(socket){
         
         if (player == null) return;
 
-        player.update_acc(data.ax, data.ay);
+        player.update_vel(data.vx, data.vy);
         player.set_dir(data.dir);
 
         this.broadcast.emit("soft update player", player.soft_data());
@@ -228,8 +327,9 @@ io.on("connection", function(socket){
         
         if (player == null) return;
 
-        player.update_acc(data.ax, data.ay);
+        player.update_vel(data.vx, data.vy);
         player.move(data.x, data.y);
+        player.set_dir(data.dir);
 
         this.broadcast.emit("hard update player", player.hard_data());
 
@@ -255,6 +355,37 @@ io.on("connection", function(socket){
         var player = get_player(this.id);
         
         if (player != null) player.resize(size);
+        
+    });
+    
+    socket.on("player shoot", function(data) {
+       
+       var player = get_player(this.id);
+       
+       if (player != null) {
+
+            // perform a hard update so the player shoots from his
+            // client-side position
+
+            player.update_vel(data.vx, data.vy);
+            player.move(data.x, data.y);
+            player.set_dir(data.dir);
+        
+            this.broadcast.emit("hard update player", player.hard_data());
+           
+            var proj = new Projectile(parseInt(Math.random() * 2000, 10), player);
+           
+            projectiles.push(proj);
+           
+            this.broadcast.emit("new projectile", proj.init_data());
+            
+            setTimeout(function() {
+                
+                del_projectile(proj);
+                
+            }, 2000);
+           
+       }
         
     });
 });

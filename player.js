@@ -3,7 +3,7 @@
  */
  
 var MAX_SIZE = 250, MIN_SIZE = 0.1;
-var ABSORB_RATE = 0.4;
+var ABSORB_RATE = 0.1;
 
 var random_hex = function() {
 	return parseInt(Math.random() * 16).toString(16).toUpperCase();	
@@ -13,8 +13,8 @@ var Player = function(x, y, id) {
 
 	this.x = x;
 	this.y = y;
-	this.ax = 0;
-	this.ay = 0;
+	this.vx = 0;
+	this.vy = 0;
 	this.id = id;
 	this.name = "null";
 	this.socket;
@@ -32,15 +32,30 @@ var Player = function(x, y, id) {
 		
 		if (this.size > other.size) {
 			
-			this.size += ABSORB_RATE * 4/2;
+			this.size += ABSORB_RATE * 1/2;
 			other.size -= ABSORB_RATE;
 			
 		} else {
 			
 			this.size -= ABSORB_RATE;
-			other.size += ABSORB_RATE * 4/2;
+			other.size += ABSORB_RATE * 1/2;
 			
 		}
+		
+		if (this.size <= MIN_SIZE) this.size = MIN_SIZE;
+		if (other.size <= MIN_SIZE) other.size = MIN_SIZE;
+	};
+	
+	this.hit = function(other) {
+		
+		if (other.size > MIN_SIZE)
+			other.size -= ABSORB_RATE;
+		
+		if (other.size <= MIN_SIZE) 
+			other.size = MIN_SIZE;
+		
+		if (this.size < MAX_SIZE) 
+			this.size += ABSORB_RATE * 1/2;
 		
 	};
 	
@@ -58,8 +73,8 @@ var Player = function(x, y, id) {
 
 	this.update = function() {
 		
-		this.x += this.ax;
-		this.y += this.ay;
+		this.x += this.vx;
+		this.y += this.vy;
 		
 	};
 
@@ -70,10 +85,10 @@ var Player = function(x, y, id) {
 		
 	};
 
-	this.update_acc = function(ax, ay) {
+	this.update_vel = function(ax, ay) {
 		
-		this.ax = ax;
-		this.ay = ay;
+		this.vx = ax;
+		this.vy = ay;
 		
 	};
 	
@@ -109,8 +124,8 @@ var Player = function(x, y, id) {
 		
 		return {
 			id: this.id,
-			ax: this.ax,
-			ay: this.ay,
+			vx: this.vx,
+			vy: this.vy,
 			size: this.size,
 			dir: this.dir
 		};
@@ -121,8 +136,8 @@ var Player = function(x, y, id) {
 
 		return {
 			id: this.id,
-			ax: this.ax,
-			ay: this.ay,
+			vx: this.vx,
+			vy: this.vy,
 			size: this.size,
 			x: this.x,
 			y: this.y
@@ -141,15 +156,9 @@ var Player = function(x, y, id) {
 
 };
 
-var SiphonBlob = function(x, y, id) {
+var SiphonBlob = function(mapsize, id) {
 	
-	this.x = parseInt(x, 10);
-	this.y = parseInt(y, 10);
-	this.id = id;
-	this.size = Math.random() * MAX_SIZE / 10;
-	this.color = "#";
-
-	for (var i = 0; i < 3; i++) this.color += random_hex();
+	this.mapsize = mapsize;
 	
 	this.init_data = function() {
 		
@@ -172,7 +181,66 @@ var SiphonBlob = function(x, y, id) {
 		
 	};
 	
+	this.refresh = function() {
+	
+		this.x = Math.random() * this.mapsize;
+		this.y = Math.random() * this.mapsize;
+		this.id = id;
+		this.size = Math.random() * MAX_SIZE / 10;
+		this.color = "#";
+	
+		for (var i = 0; i < 3; i++) this.color += random_hex();
+		
+	};
+	
+	this.is_dead = function() {
+		
+		return this.size <= MIN_SIZE;
+		
+	};
+	
+};
+
+var Projectile = function(id, player) {
+	
+	this.id = id;
+	
+	this.player = player;
+	
+	this.x = player.x;
+	this.y = player.y;
+	
+	this.size = Math.sqrt(player.size);
+	
+	this.vx = Math.sin(player.dir) * this.size + player.vx;
+	this.vy = -Math.cos(player.dir) * this.size + player.vy;
+	
+	this.color = player.color;
+	
+	this.update = function() {
+		
+		this.x += this.vx;
+		this.y += this.vy;
+		
+	};
+	
+	this.init_data = function() {
+		
+		return {
+			id: this.id,
+			vx: this.vx,
+			vy: this.vy,
+			x: this.x,
+			y: this.y,
+			size: this.size,
+			color: this.color,
+			pid: this.player.id
+		};
+		
+	};
+	
 };
 
 exports.Player = Player;
 exports.SiphonBlob = SiphonBlob;
+exports.Projectile = Projectile;
