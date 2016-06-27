@@ -24,6 +24,9 @@ var projectiles = [];
 
 var map_size = 4000;
 
+var max_mass = 1000000;
+var total_mass = 0;
+
 // basic webserver
 app.use(express.static("public"));
 
@@ -85,16 +88,38 @@ var del_projectile = function(proj) {
     
 };
 
-// set up siphons
-for (var i = 0; i < 50; i++) {
+// set up super massive siphon
+var si = new SiphonBlob(map_size, 1);
+total_mass += si.refresh();
+siphons.push(si);
+
+// set up massive siphons
+for (var i = siphons.length; i < 20; i++) {
     
-    var si = new SiphonBlob(map_size, i);
+    var si = new SiphonBlob(map_size, i, 250);
     
-    si.refresh();
+    total_mass += si.refresh();
     
     siphons.push(si);
     
 }
+
+var fill_to_total = function() {
+    // set up small siphons
+    while (total_mass < max_mass) {
+        
+        var si = new SiphonBlob(map_size, i, 100);
+        
+        total_mass += si.refresh(max_mass - total_mass);
+        
+        siphons.push(si);
+        
+    }
+};
+
+fill_to_total();
+
+console.log(total_mass);
 
 var dist = function(x, y, x1, y1) {
     
@@ -110,6 +135,7 @@ var game_loop = function() {
     var changed_siphons = [];
     var changed_players = [];
     
+    /* touch absorption */
     for (var i = 0; i < players.length; i++) {
         
         var pl = players[i];
@@ -118,7 +144,7 @@ var game_loop = function() {
             
             var oth = players[j];
             
-            var max_dist = pl.size + oth.size;
+            var max_dist = pl.radius() + oth.radius();
             
             if (dist(pl.x, pl.y, oth.x, oth.y) < max_dist) {
                 
@@ -135,11 +161,23 @@ var game_loop = function() {
             
             var oth = siphons[j];
             
-            var max_dist = pl.size + oth.size;
+            var max_dist = pl.radius() + oth.radius();
             
             if (dist(pl.x, pl.y, oth.x, oth.y) < max_dist) {
                 
                 pl.absorb(oth);
+                    
+                if (oth.is_dead()) {
+                    
+                    oth.refresh();
+                    
+                    for (var i in players) {
+                        
+                        players[i].socket.emit("siphon refresh", oth.init_data());
+                        
+                    }
+                    
+                }
                 
                 if (changed_siphons.indexOf(oth) == -1) 
                     changed_siphons.push(oth);
@@ -153,6 +191,7 @@ var game_loop = function() {
         
     }
     
+    /* projectile absorption */
     for (var i = 0; i < projectiles.length; i++) {
         
         var pr = projectiles[i];
@@ -166,13 +205,13 @@ var game_loop = function() {
             
             if (pr.player == oth) continue;
             
-            var max_dist = pr.size + oth.size;
+            var max_dist = pr.radius() + oth.radius();
             
             if (dist(pr.x, pr.y, oth.x, oth.y) < max_dist) {
                 
                 hit = true;
                 
-                pr.player.hit(oth);
+                pr.hit(oth);
                 
                 if (changed_players.indexOf(pr.player) == -1) 
                     changed_players.push(pr.player);
@@ -188,13 +227,13 @@ var game_loop = function() {
             
             var oth = siphons[j];
             
-            var max_dist = pr.size + oth.size;
+            var max_dist = pr.radius() + oth.radius();
             
             if (dist(pr.x, pr.y, oth.x, oth.y) < max_dist) {
                 
                 hit = true;
                 
-                pr.player.hit(oth);
+                pr.hit(oth);
                 
                 if (changed_players.indexOf(pr.player) == -1) 
                     changed_players.push(pr.player);
@@ -383,7 +422,7 @@ io.on("connection", function(socket){
                 
                 del_projectile(proj);
                 
-            }, 2000);
+            }, 4000);
            
        }
         

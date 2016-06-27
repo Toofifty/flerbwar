@@ -5,7 +5,17 @@
 /* global $ game two_dec escape_html */
 
 var log_message;
-var update_hs;
+var update_hs, update_info;
+    
+var format_mass = function(mass) {
+    
+    mass *= 100;
+   
+    return mass.toFixed(0).replace(/./g, function(c, i, a) {
+        return i && c !== "." && ((a.length - i) % 3 === 0) ? ',' + c : c;
+    });
+    
+};
  
 $(document).ready(function() {
  
@@ -15,6 +25,8 @@ $(document).ready(function() {
     $name_area.val(game.local_player.name());
     
     $name_submit.click(function(event) {
+        
+        if ($name_area.val() == game.local_player.name()) return;
        
        event.stopPropagation();
        event.preventDefault();
@@ -25,8 +37,14 @@ $(document).ready(function() {
         
     });
     
+    $("#name-input").keydown(function(event) {
+        event.stopPropagation();
+    }).mouseleave(function() {
+        $("button").blur();
+    });
+    
     var $log = $("#log");
-    var MAX_MESSAGES = 20;
+    var MAX_MESSAGES = 15;
     
     log_message = function(message) {
         
@@ -43,7 +61,11 @@ $(document).ready(function() {
     var sm_init = $smallest.html();
     var la_init = $largest.html();
     
+    var top_player = null;
+    
     update_hs = function(players) {
+        
+        var top = 3;
         
         var sorted = [players[0]];
         
@@ -53,15 +75,15 @@ $(document).ready(function() {
             
             for (var j in sorted) {
                 
-                if (players[i].id() == players[j].id()) continue;
-                
-                if (players[i].size() >= players[j].size()) {
+                if (players[i].mass() >= sorted[j].mass()) {
                     
                     sorted.splice(j, 0, players[i]);
+                    break;
                     
                 } else if (j == sorted.length - 1) {
                     
                     sorted.push(players[i]);
+                    break;
                     
                 }
                 
@@ -69,11 +91,22 @@ $(document).ready(function() {
             
         }
         
-        var out = "";
-        
-        for (var i = 0; i < 5 && i < sorted.length; i++) {
+        if (top_player == null || top_player != sorted[0]) {
             
-            out += "<p>" + escape_html(sorted[i].name()) + "<br>" + parseInt(two_dec(sorted[i].size()) * 100, 10) + "</p>";
+            top_player = sorted[0];
+            
+            log_message(top_player.name() + " is now in the lead!");
+            
+        }
+        
+        var out = "";
+        var mass;
+        
+        for (var i = 0; i < top && i < sorted.length; i++) {
+            
+            mass = format_mass(sorted[i].mass());
+            
+            out += "<p>#" +(i + 1) + ". " + escape_html(sorted[i].name()) + "<br>" + mass + "</p>";
             
         }
         
@@ -81,13 +114,39 @@ $(document).ready(function() {
         
         out = "";
         
-        for (var i = sorted.length - 1; i > sorted.length - 5 && i >= 0; i--) {
+        for (var i = sorted.length - 1; i >= sorted.length - top && i >= 0; i--) {
             
-            out += "<p>" + escape_html(sorted[i].name()) + "<br>" + parseInt(two_dec(sorted[i].size()) * 100, 10) + "</p>";
+            mass = format_mass(sorted[i].mass());
+            
+            out += "<p>#" +(i + 1) + ". " + escape_html(sorted[i].name()) + "<br>" + mass + "</p>";
             
         }
         
         $smallest.html(sm_init + out);
+        
+    };
+    
+    var $info = $("#info-pane");
+    var in_init = $info.html();
+    
+    update_info = function(player) {
+        
+        var info_html = in_init;
+        
+        var combined_mass = "Total game mass: " + format_mass(game.total_mass());
+        
+        var current_mass = "Your mass: " + format_mass(player.mass());
+        
+        var percentage = "(" + game.players_percentage().toFixed(2) + "% of total)";
+        
+        var shot_mass = "Shot mass: " + format_mass(player.projectile_mass());
+        
+        $info.html(info_html
+            .replace("{current mass}", current_mass)
+            .replace("{shot mass}", shot_mass)
+            .replace("{combined mass}", combined_mass)
+            .replace("{percentage}", percentage)
+        );
         
     };
     

@@ -3,7 +3,7 @@
  */
  
 /* global Player LocalControls SiphonBlob Projectile Map Camera Graphics $ io 
-Keyboard log_message update_hs two_dec */
+Keyboard log_message update_hs two_dec update_info */
 
 var game;
 
@@ -28,6 +28,8 @@ var escape_html = function(string) {
 
 $(document).ready(function() {
     
+    console.log("dont hack pls kyle");
+    
     // window resizing
     $(window).resize(function(event) {
         
@@ -47,6 +49,10 @@ $(document).ready(function() {
         
         game.mousedown(event.button);
         
+    }).mouseup(function() {
+        
+        game.mouseup();
+        
     });
 
     var socket = io();
@@ -61,7 +67,7 @@ $(document).ready(function() {
         noob.name(data.name);
         noob.color(data.color);
         noob.dir(data.dir);
-        noob.size(data.size);
+        noob.mass(data.mass);
         
         game.add_player(noob);
         
@@ -86,7 +92,7 @@ $(document).ready(function() {
     socket.on("confirm player", function(data) {
 
         game.local_player.id(data.id);
-        //game.local_player.resize(data.size);
+        game.local_player.mass(data.mass);
 
     });
 
@@ -97,7 +103,7 @@ $(document).ready(function() {
         if (player == null) return;
 
         player.vel(data.vx, data.vy);
-        player.size(data.size);
+        player.mass(data.mass);
         player.dir(data.dir);
         player.reset_deadmarks();
 
@@ -144,7 +150,7 @@ $(document).ready(function() {
     socket.on("new siphon", function(data) {
         
         var siphon = new SiphonBlob(data.x, data.y, 
-            data.id, data.size, data.color);
+            data.id, data.mass, data.color);
             
         game.add_siphon(siphon);
         
@@ -152,7 +158,7 @@ $(document).ready(function() {
     
     socket.on("siphon update", function(data) {
         
-        game.siphons[data.id].size(data.size);
+        game.siphons[data.id].mass(data.mass);
         
     });
     
@@ -162,12 +168,12 @@ $(document).ready(function() {
         
         if (siphon == null) {
             
-            siphon = new SiphonBlob(data.x, data.y, data.id, data.size, 
+            siphon = new SiphonBlob(data.x, data.y, data.id, data.mass, 
                 data.color);
                 
         } else {
             
-            siphon.size(data.size);
+            siphon.mass(data.mass);
             siphon.pos(data.x, data.y);
             
         }
@@ -180,14 +186,14 @@ $(document).ready(function() {
         
         if (player == null) return;
         
-        player.size(data.size);
+        player.mass(data.mass);
         
     });
     
     socket.on("new projectile", function(data) {
         
         var proj = new Projectile(data.id, data.x, data.y, data.vx, data.vy,
-            data.size, data.color, data.pid);
+            data.mass, data.color, data.pid);
             
         game.add_projectile(proj);
         
@@ -240,7 +246,7 @@ $(document).ready(function() {
             this.context = this.canvas.getContext("2d");
             this.mm_context = this.mm_canvas.getContext("2d");
             
-            this.context.font = "20px Indie Flower";
+            this.context.font = "20px Nova Square";
             this.context.textAlign = "center";
             this.context.strokeStyle = "#FFF";
 
@@ -269,7 +275,7 @@ $(document).ready(function() {
             this.canvas.width = $(window).innerWidth();
             this.canvas.height = $(window).innerHeight();
             
-            this.context.font = "20px Indie Flower";
+            this.context.font = "20px Nova Square";
             this.context.textAlign = "center";
             
             this.camera.resize($(window).innerWidth(), $(window).innerHeight());
@@ -282,18 +288,11 @@ $(document).ready(function() {
             this.clear();
             
             this.map.draw(this);
-            this.map.draw_minimap(this);
+            //this.map.draw_minimap(this);
             
             this.controls.update(this);
             
             this.camera.update();
-            
-            for (var i in this.projectiles) {
-                
-                this.projectiles[i].update(this);
-                this.projectiles[i].draw(this);
-                
-            }
             
             for (var i in this.siphons) {
                 
@@ -321,8 +320,19 @@ $(document).ready(function() {
             this.graphics.minimap_ring(
                 this.local_player.pos().x, 
                 this.local_player.pos().y,
-                this.local_player.size()
+                this.local_player.radius()
             );
+            
+            for (var i in this.projectiles) {
+                
+                this.projectiles[i].update(this);
+                
+                if (this.projectiles[i] !== undefined)
+                    this.projectiles[i].draw(this);
+                
+            }
+            
+            update_info(this.local_player);
 
         },
 
@@ -442,7 +452,12 @@ $(document).ready(function() {
         mousedown: function(b) {
             
             this.mouse.b = b;
-            console.log(b);
+            
+        },
+        
+        mouseup: function() {
+            
+            this.mouse.b = -1;
             
         },
         
@@ -450,10 +465,9 @@ $(document).ready(function() {
             
             var tm = 0;
             
-            for (var i in this.siphons) tm += this.siphons[i].size();
-            for (var i in this.players) tm += this.players[i].size();
-            
-            console.log(tm);
+            for (var i in this.siphons) tm += this.siphons[i].mass();
+            for (var i in this.players) tm += this.players[i].mass();
+            for (var i in this.projectiles) tm += this.projectiles[i].mass();
             
             return tm;
             
@@ -463,7 +477,7 @@ $(document).ready(function() {
             
             player = player || this.local_player;
             
-            return two_dec(player.size() / this.total_mass() * 100);
+            return player.mass() / this.total_mass() * 100;
             
         },
         

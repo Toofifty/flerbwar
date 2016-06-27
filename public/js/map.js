@@ -81,6 +81,8 @@ var Camera = function(w, h) {
     
     this.scale = 5;
     
+    this.scale_goal = 5;
+    
     this.resize = function(w, h) {
         
         this.w = w;
@@ -113,6 +115,12 @@ var Camera = function(w, h) {
     this.update = function() {
         
         if (this.target == null) return;
+        
+        if (this.scale != this.scale_goal) {
+            
+            this.scale += (this.scale_goal - this.scale) / 50;
+            
+        };
       
         this.offset_x = this.w / (2 * this.scale) - this.target.pos().x;
         this.offset_y = this.h / (2 * this.scale) - this.target.pos().y;
@@ -132,7 +140,9 @@ var Graphics = function(game) {
     
     // should be the size of the largest object in the game
     // so it doesn't get culled (drink!)
-    this.safe_zone = 250;
+    
+    // current max radius: 282
+    this.safe_zone = 300;
         
     var self = this;
     
@@ -207,11 +217,15 @@ var Graphics = function(game) {
         
         if (this.out_of_bounds(tl)) return;
 		    
-		this.context.fillText(text, tl.x, tl.y);  
+		this.context.fillText(text, tl.x, tl.y);
         
     };
     
     this.minimap_dot = function(x, y, size, color) {
+            
+        var tl = this.camera.apply(x, y);
+        
+        if (this.out_of_bounds(tl)) return;
         
         this.minimap.fillStyle = color;
         
@@ -240,10 +254,6 @@ var Graphics = function(game) {
     };
     
     this.minimap_rect = function(x, y, w, h, color) {
-        
-        var tl = this.camera.apply(x, y);
-        
-        if (this.out_of_bounds(tl)) return;
         
         var norm = function(v) {
             return v / self.map_size * self.minimap_size;

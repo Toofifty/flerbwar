@@ -2,9 +2,9 @@
  * local and network player classes
  */
  
-/* global log_message */
+/* global log_message format_mass */
 
-var MAX_SIZE = 250, MIN_SIZE = 0.1, COOLDOWN = 20;
+var MAX_MASS = 250000, MIN_MASS = 0.1, COOLDOWN = 20;
 
 var two_dec = function(num) {
 	
@@ -27,40 +27,77 @@ var dist = function(x, y, x1, y1) {
     
 };
 
-var Blob = function(x, y, size, color) {
+var Blob = function(x, y, mass, color) {
+	
+	var self = this;
 
 	this.x = x;
 	this.y = y;
 	
-	this._size = size;
+	this._mass = mass;
 	this._color = color;
+	
+	// list of text drops
+	this.drops = [];
+	
+	// single drop
+	this.drop = null;
+	
+	this.mass_goal = this._mass;
 
-	this.reduce = function(game) {
+	this.debug_reduce = function(game) {
 
-		this.size(this._size / 1.03);
+		this.mass(this._mass / 1.03);
 		
-		game.socket.emit("debug resize", this.size());
+		game.socket.emit("debug resize", this.mass());
 
 	};
 
-	this.increase = function(game) {
+	this.debug_increase = function(game) {
 
-		this.size(this._size * 1.03);
+		this.mass(this._mass * 1.03);
 		
-		game.socket.emit("debug resize", this.size());
+		game.socket.emit("debug resize", this.mass());
 
 	};
 
 	this.draw = function(game) {
 		
-		if (this.size() === undefined) console.log("undefined size for " + this.color());
+		if (this.mass_goal != this._mass) {
+			
+			this._mass += (this.mass_goal - this._mass) / 20;
+			
+		}
 		
-		// game.graphics.circle(this.x, this.y, this.size, 
-		// 	"hsl(" + this.color + ", 50%, 50%)");
+		game.graphics.circle(this.x, this.y, this.radius(), this.color());
 		
-		game.graphics.circle(this.x, this.y, this.size(), this.color());
+		game.graphics.minimap_dot(this.x, this.y, this.radius(), this.color());
 		
-		game.graphics.minimap_dot(this.x, this.y, this.size(), this.color());
+		if (this.drop != null) {
+			
+			game.graphics.text(
+				this.drop.text, this.x, 
+				this.y + this.radius() / 2 + this.drop.y, 
+				"rgba(255,255,255," + (1 - this.drop.y / this.radius()) + ")"
+			);
+			
+			this.drop.y += this.radius() / (2 *this.drop.timeout / 20);
+			
+		}
+		
+		for (var i in this.drops) {
+			
+			var d = this.drops[i];
+			
+			game.graphics.text(
+				d.text, this.x, 
+				this.y + this.radius() / 2 + d.y, 
+				"rgba(255,255,255," + (1 - d.y / this.radius()) + ")"
+			);
+			
+			d.y += this.radius() / (2 * d.timeout / 20);
+			
+		}
 
 	};
 
@@ -84,18 +121,33 @@ var Blob = function(x, y, size, color) {
 		
 	};
 	
-	this.size = function(size) {
+	/* mass, AKA the area of the blob */
+	this.mass = function(mass) {
 		
-		if (size !== undefined) {
+		if (mass !== undefined) {
 			
-			this._size = size;
+			var diff = mass - this.mass_goal;
 			
-			if (this._size > MAX_SIZE) this._size = MAX_SIZE;
-			if (this._size < MIN_SIZE) this._size = MIN_SIZE;
+			if (diff == 0) return this.mass_goal;
+			
+			var sign = diff >= 0 ? "+" : "-";
+			
+			this.add_drop(sign + format_mass(Math.abs(diff)), 500);
+			
+			this.mass_goal = mass;
+			
+			if (this.mass_goal > MAX_MASS) this.mass_goal = MAX_MASS;
+			if (this.mass_goal < MIN_MASS) this.mass_goal = MIN_MASS;
 			
 		}
 		
-		return this._size;
+		return this.mass_goal;
+		
+	};
+	
+	this.radius = function() {
+		
+		return Math.sqrt(this._mass / Math.PI);
 		
 	};
 	
@@ -104,6 +156,30 @@ var Blob = function(x, y, size, color) {
 		if (color !== undefined) this._color = color;
 		
 		return this._color;
+		
+	};
+	
+	this.add_drop = function(text, timeout) {
+		
+		this.drop = {
+			id: parseInt(Math.random() * 1000).toString(),
+			text: text,
+			y: 0,
+			timeout: timeout
+		};
+		
+		//this.drops.push(drop);
+		
+		setTimeout(this.delete_drop, timeout);
+		
+	};
+	
+	this.delete_drop = function() {
+		
+		// if (self.drops.length >= 1)
+		// 	self.drops.splice(0, 1);
+		
+		this.drop = null;
 		
 	};
 
@@ -126,20 +202,22 @@ var Player = function(x, y, id) {
 	
 	this._dir = 0;
 	
+	this.goal_dir = 0;
+	
 	this.deadmarks = 0;
 	
 	this.shoot = function(game) {
 		
 		if (this.cooldown > 0) return;
 		
-		var sq_s = Math.sqrt(this.size());
+		var speed = Math.sqrt(this.radius()) / 2;
 		
 		var id = parseInt(Math.random() * 1000, 10);
 		
 		game.add_projectile(new Projectile(id, this.pos().x, 
-			this.pos().y, Math.sin(this.dir()) * sq_s + this.vx, 
-			-Math.cos(this.dir()) * sq_s + this.vy, sq_s, this.color()), 
-			this._id);
+			this.pos().y, Math.sin(this.dir()) * speed + this.vx, 
+			-Math.cos(this.dir()) * speed + this.vy, this.projectile_mass(), this.color(), 
+			this._id));
 		
 		game.socket.emit("player shoot", this.hard_data());
 		
@@ -147,9 +225,60 @@ var Player = function(x, y, id) {
 			
 			game.del_projectile(id);
 			
-		}, 2000);
+		}, 4000);
+		
+		this.reduce(this.projectile_mass());
 		
 		this.cooldown = COOLDOWN;
+		
+	};
+	
+	this.add_drop = function(text) {
+		
+		this.blob.add_drop(text, 500);
+		
+	};
+	
+	this.reduce = function(mass) {
+		
+		this.mass(this.mass() - mass);
+		
+		this.add_drop("-" + format_mass(mass));
+		
+	};
+	
+	this.increase = function(mass) {
+		
+		this.mass(this.mass() + mass);
+		
+		this.add_drop("+" + format_mass(mass));
+		
+	};
+	
+	
+	this.debug_reduce = function(mass, game) {
+		
+		mass = 100 * mass;
+		
+		game.socket.emit("debug resize", this.mass(this.mass() - mass));
+		
+		this.add_drop("-" + format_mass(mass));
+		
+	};
+	
+	this.debug_increase = function(mass, game) {
+		
+		mass = 100 * mass;
+		
+		game.socket.emit("debug resize", this.mass(this.mass() + mass));
+		
+		this.add_drop("+" + format_mass(mass));
+		
+	};
+	
+	this.projectile_mass = function() {
+		
+		return Math.sqrt(this.mass() * 100) / 100;
 		
 	};
 	
@@ -200,15 +329,21 @@ var Player = function(x, y, id) {
 
 	};
 	
-	this.size = function(size) {
+	this.mass = function(mass) {
 		
-		return this.blob.size(size);
+		return this.blob.mass(mass);
+		
+	};
+	
+	this.radius = function() {
+		
+		return this.blob.radius();
 		
 	};
 	
 	this.dir = function(dir) {
 		
-		if (dir !== undefined) this._dir = dir;
+		if (dir !== undefined) this.goal_dir = dir;
 		
 		return this._dir;
 		 
@@ -228,6 +363,26 @@ var Player = function(x, y, id) {
 
 	/* apply acceleration and calculate new position */
 	this.update = function(game) {
+		
+		// this._dir = (this._dir + 2 * Math.PI) % (2 * Math.PI);
+		// this.goal_dir = (this.goal_dir + 2 * Math.PI) % (2 * Math.PI);
+		
+		// var rot = Math.min(Math.PI * 2, Math.max(Math.PI / 10 / this.radius(), 0.01));
+		
+		// if (this._dir < this.goal_dir) {
+			
+		// 	if (this.goal_dir - Math.PI > this._dir) this._dir -= rot;
+		// 	else this._dir += rot;
+			
+		// } else if (this._dir > this.goal_dir) {
+			
+		// 	if (this.goal_dir + Math.PI < this._dir) this._dir += rot;
+		// 	else this._dir -= rot;
+			
+		// }
+		
+		// if (Math.abs(this.goal_dir - this._dir) <= rot)
+			this._dir = this.goal_dir;
 
 		// move blob by velocity
 		this.move(this.vx, this.vy);
@@ -251,12 +406,12 @@ var Player = function(x, y, id) {
 		
 		var p = this.pos();
 			
-		game.graphics.pointer(p.x, p.y, this.size() * 17/16, "#FFF",
+		game.graphics.pointer(p.x, p.y, this.radius() * 17/16, "#FFF",
 			this.dir());
+		
+		game.graphics.pointer(p.x, p.y, this.radius(), this.color(), this.dir());
 
 		this.blob.draw(game);
-		
-		game.graphics.pointer(p.x, p.y, this.size(), this.color(), this.dir());
 			
 		game.graphics.text(this.name(), p.x, p.y);// - this.blob.size - 10);
 
@@ -288,14 +443,14 @@ var Player = function(x, y, id) {
 
 };
 
-var Projectile = function(id, x, y, vx, vy, size, color, pid) {
+var Projectile = function(id, x, y, vx, vy, mass, color, pid) {
 	
 	this._id = id;
 	
 	this.vx = vx;
 	this.vy = vy;
 	
-	this.blob = new Blob(x, y, size, color);
+	this.blob = new Blob(x, y, mass, color);
 	
 	this.pid = pid;
 	
@@ -304,6 +459,18 @@ var Projectile = function(id, x, y, vx, vy, size, color, pid) {
 		if (id !== undefined) this._id = id;
 		
 		return this._id;
+		
+	};
+	
+	this.mass = function(mass) {
+		
+		return this.blob.mass(mass);
+		
+	};
+	
+	this.radius = function() {
+		
+		return this.blob.radius();
 		
 	};
 	
@@ -319,11 +486,11 @@ var Projectile = function(id, x, y, vx, vy, size, color, pid) {
 			
 			if (pl.id() == this.pid) continue;
 			
-			var max_dist = pl.size() + this.blob.size();
+			var max_dist = pl.radius() + this.radius();
 			
-			if (dist(this.blob.pos(), pl.pos()) < max_dist) {
+			if (dist(this.pos(), pl.pos()) < max_dist) {
 				
-				game.del_projectile(this.id);
+				game.del_projectile(this._id);
 				
 			}
 			
@@ -333,15 +500,21 @@ var Projectile = function(id, x, y, vx, vy, size, color, pid) {
 			
 			var si = game.siphons[i];
 			
-			var max_dist = si.size() + this.blob.size();
+			var max_dist = si.radius() + this.radius();
 			
-			if (dist(this.blob.pos(), si.pos()) < max_dist) {
+			if (dist(this.pos(), si.pos()) < max_dist) {
 				
-				game.del_projectile(this.id);
+				game.del_projectile(this._id);
 				
 			}
 			
 		}
+		
+	};
+	
+	this.pos = function(x, y) {
+		
+		return this.blob.pos(x, y);
 		
 	};
 	
@@ -359,22 +532,19 @@ var LocalControls = function(player) {
 
 	this.update = function(game) {
 		
-		// var acc = 0.1 / Math.pow(this.player.blob.size, 0.1);
-		var acc = 0.1 / Math.pow((this.player.blob.size() + 2.5), 0.25);
+		var acc = 100 * 0.1 / Math.pow((this.player.radius() + 2.5), 0.25);
 
 		if (game.keyboard.is_down("w")) this.player.accelerate(0, -acc);
 		if (game.keyboard.is_down("a")) this.player.accelerate(-acc, 0);
 		if (game.keyboard.is_down("s")) this.player.accelerate(0, acc);
 		if (game.keyboard.is_down("d")) this.player.accelerate(acc, 0);
-		// if (game.keyboard.is_down("r")) this.player.dir += 0.1;
-		// if (game.keyboard.is_down("t")) this.player.dir -= 0.1;
-		// if (game.keyboard.is_down("e")) this.player.blob.reduce(game);
-		// if (game.keyboard.is_down("q")) this.player.blob.increase(game);
 		
-		if (game.keyboard.is_down(" ")) this.player.shoot(game);
+		if (game.keyboard.is_down("e")) this.player.debug_reduce(this.player.projectile_mass(), game);
+		if (game.keyboard.is_down("q")) this.player.debug_increase(this.player.projectile_mass(), game);
 		
-		// game.camera.scale = 20 / Math.sqrt(this.player.blob.size);
-		game.camera.scale = 20 / Math.sqrt(this.player.blob.size()) - 0.5;
+		if (game.keyboard.is_down(" ") || game.mouse.b > -1) this.player.shoot(game);
+		
+		game.camera.scale_goal = 20 / this.player.radius() + 1;
 		
 		var sx = game.canvas.width / 2;
 		var sy = game.canvas.height / 2;
@@ -388,15 +558,21 @@ var LocalControls = function(player) {
 
 };
 
-var SiphonBlob = function(x, y, id, size, color) {
+var SiphonBlob = function(x, y, id, mass, color) {
 	
 	this.id = id;
 	
-	this.blob = new Blob(x, y, size, color);
+	this.blob = new Blob(x, y, mass, color);
 	
-	this.size = function(size) {
+	this.mass = function(mass) {
 		
-		return this.blob.size(size);
+		return this.blob.mass(mass);
+		
+	};
+	
+	this.radius = function() {
+		
+		return this.blob.radius();
 		
 	};
 
@@ -433,7 +609,7 @@ var Keyboard = function(elem) {
 		if (self.keys.indexOf(event.keyCode) == -1)
 			self.keys.push(event.keyCode);
 
-		console.log("Key " + event.keyCode);
+		//console.log("Key " + event.keyCode);
 
 	}).keyup(function(event) {
 

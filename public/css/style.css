@@ -1,4 +1,4 @@
-@import url(https://fonts.googleapis.com/css?family=Indie+Flower|Source+Code+Pro|Lato);
+@import url(https://fonts.googleapis.com/css?family=Nova+Square|Source+Code+Pro|Lato);
 
 body {
 	background: #222;
@@ -22,11 +22,11 @@ canvas {
 	width: 300px;
 	height: 300px;
 	
-	border: 1px solid #FFF;
+	background: rgba(32,32,32,0.2);
 }
 
 #name-input {
-	background: #222;
+	background: rgba(32,32,32,0.2);
 	
 	position: fixed;
 	bottom: 0;
@@ -35,12 +35,31 @@ canvas {
 	padding: 10px;
 }
 
+#name-input input {
+	background: rgba(255,255,255,0.1);
+	border: 1px solid rgba(255,255,255,0.1);
+	color: #FFF;
+	font-family: "Nova Square", sans-serif;
+}
+
+#name-input button {
+	background: rgba(255,255,255,0.1);
+	border: 1px solid rgba(255,255,255,0.1);
+	cursor: pointer;
+	color: #FFF;
+	font-family: "Nova Square", sans-serif;
+}
+
+#name-input button:active {
+	transform: translateY(1px);
+}
+
 #log {
-	background: rgba(32,32,32,0.75);
+	background: rgba(32,32,32,0.2);
 	position: fixed;
 	left: 0;
 	top: 0;
-	height: 100%;
+	height: 15em;
 	width: 20%;
 	max-width: 300px;
 	padding: 2px;
@@ -60,12 +79,12 @@ canvas {
 }
 
 .scoreboard {
-	background: rgba(32,32,32,0.75);
+	background: rgba(32,32,32,0.2);
 	position: fixed;
 	top: 0;
 	right: 0;
 	color: #FFF;
-	font-family: "Lato", sans-serif;
+	font-family: "Nova Square", sans-serif;
 	width: 20%;
 	max-width: 300px;
 	
@@ -90,4 +109,35 @@ canvas {
 	width: calc(100% - 20px);
 	vertical-align: top;
 	overflow: hidden;
+}
+
+#info-pane {
+	position: fixed;
+	bottom: 0;
+	left: 50%;
+	
+	transform: translateX(-50%);
+	color: #FFF;
+	background: rgba(32,32,32,0.2);
+	
+	font-family: "Nova Square", sans-serif;
+	
+	padding: 5px;
+	
+	text-align: center;
+}
+
+#info-pane > p {
+	display: inline-block;
+	margin: 10px;
+}
+
+.key {
+	border: 1px solid #FFF;
+	border-radius: 4px;
+	padding: 2px;
+	box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+	display: inline-block;
+	min-width: 20px;
+	text-align: center;
 }
