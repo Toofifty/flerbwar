@@ -24,7 +24,7 @@ var projectiles = [];
 
 var map_size = 4000;
 
-var max_mass = 1000000;
+var max_mass = 250000;
 var total_mass = 0;
 
 // basic webserver
@@ -96,7 +96,7 @@ siphons.push(si);
 // set up massive siphons
 for (var i = siphons.length; i < 20; i++) {
     
-    var si = new SiphonBlob(map_size, i, 250);
+    var si = new SiphonBlob(map_size, i, 7500);
     
     total_mass += si.refresh();
     
@@ -105,10 +105,13 @@ for (var i = siphons.length; i < 20; i++) {
 }
 
 var fill_to_total = function() {
+    
+    var i = siphons.length;
+    
     // set up small siphons
     while (total_mass < max_mass) {
         
-        var si = new SiphonBlob(map_size, i, 100);
+        var si = new SiphonBlob(map_size, i++, 100);
         
         total_mass += si.refresh(max_mass - total_mass);
         
@@ -126,6 +129,20 @@ var dist = function(x, y, x1, y1) {
     return Math.sqrt((x - x1) * (x - x1) + (y - y1) * (y - y1));
     
 };
+
+var get_total_mass = function() {
+    
+    var tm = 0;
+    
+    for (var i in players) tm += players[i].mass;
+    for (var i in siphons) tm += siphons[i].mass;
+    for (var i in projectiles) tm += projectiles[i].mass;
+    
+    console.log("tm " + tm);
+    
+    return tm;
+    
+}
 
 // game logic loop
 var game_loop = function() {

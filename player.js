@@ -2,8 +2,7 @@
  * player.js - server version of the player object
  */
  
-var MAX_MASS = 250000, MIN_MASS = 0.1;
-var ABSORB_RATE = 0.1;
+var MAX_MASS = 250000, MIN_MASS = 0.5;
 
 var random_hex = function() {
 	return parseInt(Math.random() * 16).toString(16).toUpperCase();	
@@ -42,7 +41,7 @@ var Player = function(x, y, id) {
 			if (this.mass <= MIN_MASS || other.mass >= MAX_MASS) return;
 			
 			this.mass -= mass;
-			other.mass += mass * 1/2;
+			other.mass += mass;
 			
 		}
 		
@@ -209,11 +208,13 @@ var SiphonBlob = function(mapsize, id, max_size) {
 	this.refresh = function(max) {
 		
 		var max = max || this.max_size;
+		
+		max = Math.min(max, this.max_size);
 	
 		this.x = Math.random() * this.mapsize;
 		this.y = Math.random() * this.mapsize;
 		this.id = id;
-		this.mass = Math.random() * max, 1;
+		this.mass = Math.random() * max;
 		
 		
 		// this.color = "#";

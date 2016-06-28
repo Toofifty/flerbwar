@@ -4,7 +4,7 @@
  
 /* global log_message format_mass */
 
-var MAX_MASS = 250000, MIN_MASS = 0.1, COOLDOWN = 20;
+var MAX_MASS = 250000, MIN_MASS = 1, COOLDOWN = 20;
 
 var two_dec = function(num) {
 	
@@ -532,7 +532,7 @@ var LocalControls = function(player) {
 
 	this.update = function(game) {
 		
-		var acc = 100 * 0.1 / Math.pow((this.player.radius() + 2.5), 0.25);
+		var acc = 0.1 / Math.pow((this.player.radius() + 2.5), 0.25);
 
 		if (game.keyboard.is_down("w")) this.player.accelerate(0, -acc);
 		if (game.keyboard.is_down("a")) this.player.accelerate(-acc, 0);
